@@ -27,7 +27,8 @@
 | bill_length_mm | ~0.43 |
 | bill_depth_mm | ~0.21 |
 
-Baseline RMSE: [X] g | Model RMSE: [Y] g
+Baseline RMSE: [X] g | Model RMSE: [Y] g 
+
 <img width="572" height="356" alt="Figure_1" src="https://github.com/user-attachments/assets/fed2368c-c582-445a-b307-14641416b6a9" />
 <img width="522" height="418" alt="Figure_2" src="https://github.com/user-attachments/assets/d6eaadbf-12f4-48d3-a474-a2c1c5daf57e" />
 <img width="529" height="357" alt="Figure_3" src="https://github.com/user-attachments/assets/b12174da-538f-4403-883a-5960f34d110f" />
