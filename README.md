@@ -11,6 +11,32 @@
 [![MIT](https://img.shields.io/badge/license-see%20LICENSE-yellow.svg)](./LICENSE)
 
 > Professional Python project: linear regression and predictive analytics.
+ 
+ ## My Custom Project: Predicting Penguin Body Mass
+
+**Question:** Which single measurement best predicts a penguin's body mass?
+
+**What I modified:** I changed the feature from `bill_length_mm` to
+`flipper_length_mm` and added a comparison of three candidate features.
+
+**Results**
+
+| Feature | R² (test) |
+|---|---|
+| flipper_length_mm | ~0.77 |
+| bill_length_mm | ~0.43 |
+| bill_depth_mm | ~0.21 |
+
+Baseline RMSE: [X] g | Model RMSE: [Y] g
+
+![Predictions](docs/images/regression-predictions.png)
+![Residuals](docs/images/regression-residuals.png)
+![Feature comparison](docs/images/feature-comparison.png)
+
+**Interpretation:** Flipper length is a strong predictor. Residuals are
+scattered randomly around zero, so a straight line fits reasonably well.
+
+**Next steps:** Train a separate model per species.
 
 ## Project Goal
 
