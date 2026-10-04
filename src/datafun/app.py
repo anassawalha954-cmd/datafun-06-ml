@@ -27,6 +27,12 @@ In this project, we use one numeric feature
 to predict one numeric target
 with a simple linear regression model.
 
+CUSTOM MODIFICATION:
+
+I changed the main feature from bill length to flipper length,
+and added a comparison of several candidate features
+to see which single measurement predicts body mass best.
+
 A standard predictive modeling process is:
 
 1. OBSERVE the data and prior findings.
@@ -37,20 +43,9 @@ A standard predictive modeling process is:
 6. TRAIN a LinearRegression model.
 7. PREDICT on X_test.
 8. EVALUATE baseline vs model on y_test.
-9. VISUALIZE predictions and residuals.
-10. ASSESS the results.
-
-DESIGN:
-
-Use this file to declare the data-specific choices
-and the reasoning behind them,
-then orchestrate the work.
-
-Scikit-learn provides the machine learning tools.
-
-The target, feature, split, baseline,
-and model choices stay here because they are
-analytical decisions specific to this project.
+9. COMPARE candidate features (custom addition).
+10. VISUALIZE predictions and residuals.
+11. ASSESS the results.
 """
 
 # === DECLARE IMPORTS (BRING IN FREE CODE) ===
@@ -75,137 +70,149 @@ LOG: logging.Logger = get_logger("P06", level="DEBUG")
 
 # === DECLARE GLOBAL CONSTANTS ===
 
-# Some global variables are CONSTANT.
-# They do NOT change while the program runs.
-# By convention, constants use UPPERCASE_WITH_UNDERSCORES.
-# Final indicates that the value should not be reassigned.
-
-# === LOCATE THE DATA FILE ===
-
 DATA_FILE_PATH: Final[Path] = Path("data") / "raw" / "penguins.csv"
-
-# === LOCATE THE CHART OUTPUT ===
 
 CHART_DIR: Final[Path] = Path("docs") / "images"
 
 PREDICTION_CHART_PATH: Final[Path] = CHART_DIR / "regression-predictions.png"
-
 RESIDUAL_CHART_PATH: Final[Path] = CHART_DIR / "regression-residuals.png"
-
-# === DETERMINE WHAT ONE ROW REPRESENTS ===
+COMPARISON_CHART_PATH: Final[Path] = CHART_DIR / "feature-comparison.png"
 
 GRAIN: Final[str] = "one penguin"
 
 # === DECLARE THE TARGET ===
 
-# CUSTOM: Choose one NUMERIC target value to predict.
-# This must match a numeric column name EXACTLY
-# as it appears in the data file.
-
 TARGET_COLUMN: Final[str] = "body_mass_g"
 
-# === DECLARE THE FEATURE ===
+# === DECLARE THE FEATURE (CUSTOM CHANGE) ===
 
-# CUSTOM: Choose one NUMERIC feature
-# that might help predict the target.
-# This must match a numeric column name EXACTLY
-# as it appears in the data file.
+FEATURE_COLUMN: Final[str] = "flipper_length_mm"
 
-FEATURE_COLUMN: Final[str] = "bill_length_mm"
+# Candidate features for the comparison step.
 
-# === DOCUMENT WHY THE FEATURE MIGHT HELP ===
-
-# CUSTOM: Document the reasoning behind the feature choice.
-# Do not assume the feature will work well.
-# The model and evaluation will provide evidence.
+CANDIDATE_FEATURES: Final[list[str]] = [
+    "bill_length_mm",
+    "bill_depth_mm",
+    "flipper_length_mm",
+]
 
 FEATURE_DECISION: Final[str] = r"""
 I want to predict body mass.
 
-I selected bill length as the feature.
+I selected flipper length as the main feature.
 
-A bigger penguin may have both a longer bill and more mass,
-so bill length might contain useful information
-for predicting body mass.
+Flipper length reflects overall body size.
+A penguin with longer flippers is likely larger
+and may therefore weigh more.
 
-I do not know yet how well bill length will predict body mass.
+In an earlier version I used bill length.
+I want to test whether flipper length is a better predictor.
+
+I do not know yet how well it will work.
 The modeling process will provide evidence.
 """
 
 # === DECLARE THE TRAIN / TEST SPLIT ===
 
-# CUSTOM: Decide how much data should be held back for testing.
-# The test data should NOT be used to train the model.
-
 TEST_FRACTION: Final[float] = 0.20
-
-# CUSTOM: Choose whether the random split should be reproducible.
-# A fixed random seed makes the same split each time the script runs.
-
 RANDOM_SEED: Final[int] = 42
-
-# === DOCUMENT THE SPLIT DECISION ===
-
-# CUSTOM: Document the reasoning behind BOTH choices.
-# The fraction and random seed should not be unexplained numbers.
 
 SPLIT_DECISION: Final[str] = r"""
 I will use 80% of the modeling rows for training
 and hold back 20% for testing.
 
-I want most of the available data to be available
-for learning the model,
-while still keeping a separate set of observations
-that the model did not see during training.
+Most of the data is available for learning,
+while a separate set of unseen observations
+is kept for evaluating the model.
 
-The test rows will be used later
-to evaluate how the trained model performs
-on unseen observations.
-
-I will use a random seed of 42.
-
-The specific value 42 is not analytically important.
-I use a fixed seed so the random split is reproducible.
-Running the project again will produce the same
-training and test observations,
-which makes results easier to reproduce and compare.
+I use a fixed random seed of 42.
+The value itself is not analytically important.
+It makes the split reproducible,
+so results are easy to repeat and compare.
 """
 
 # === DECLARE THE BASELINE ===
 
 BASELINE_STRATEGY: Final[str] = "mean"
 
-# === DOCUMENT THE BASELINE DECISION ===
-
 BASELINE_DECISION: Final[str] = r"""
 Before evaluating the LinearRegression model,
 I need a simple baseline for comparison.
 
-The baseline will ignore bill length
-and predict the average body mass
+The baseline ignores the feature
+and predicts the average body mass
 from the training data for every test observation.
 
-A useful predictive model should improve
-on this simple reference prediction.
+A useful model should improve on this reference.
 """
-
-# === DOCUMENT THE MODEL DECISION ===
 
 MODEL_DECISION: Final[str] = r"""
 I will use LinearRegression.
 
-Linear regression fits a straight-line relationship
-between the selected feature and target.
-
-This gives a simple and interpretable model
+It fits a straight-line relationship
+between the selected feature and the target.
+This gives a simple, interpretable model
 that can be compared with the baseline.
 
-Fitting a line does not prove that a straight line
+Fitting a line does not prove a straight line
 is a good description of the relationship.
-
-The evaluation metrics and residual plot
+The metrics and the residual plot
 will help assess whether the model is useful.
 """
+
+
+# === HELPER FUNCTION (CUSTOM ADDITION) ===
+
+
+def compare_features(
+    df: pd.DataFrame,
+    target: str,
+    features: list[str],
+) -> pd.DataFrame:
+    """Train one simple linear model per feature and compare them.
+
+    All features use the same rows and the same split,
+    so the comparison is fair.
+
+    Arguments:
+        df: The full DataFrame.
+        target: The numeric target column.
+        features: The candidate numeric feature columns.
+
+    Returns:
+        A DataFrame with RMSE and R-squared per feature,
+        sorted from best to worst R-squared.
+    """
+    df_common: pd.DataFrame = df.dropna(subset=[target, *features]).copy()
+
+    train_idx, test_idx = train_test_split(
+        df_common.index,
+        test_size=TEST_FRACTION,
+        random_state=RANDOM_SEED,
+    )
+
+    y_train: pd.Series = df_common.loc[train_idx, target]
+    y_test: pd.Series = df_common.loc[test_idx, target]
+
+    rows: list[dict[str, float | str]] = []
+
+    for feature in features:
+        X_train: pd.DataFrame = df_common.loc[train_idx, [feature]]
+        X_test: pd.DataFrame = df_common.loc[test_idx, [feature]]
+
+        candidate_model = LinearRegression()
+        candidate_model.fit(X_train, y_train)
+        predictions: np.ndarray = candidate_model.predict(X_test)
+
+        rows.append(
+            {
+                "feature": feature,
+                "rmse": float(root_mean_squared_error(y_test, predictions)),
+                "r_squared": float(r2_score(y_test, predictions)),
+            }
+        )
+
+    return pd.DataFrame(rows).sort_values("r_squared", ascending=False)
 
 
 # === DEFINE THE MAIN FUNCTION ===
@@ -213,8 +220,6 @@ will help assess whether the model is useful.
 
 def main() -> None:
     """Entry point when running this file as a Python script.
-
-    This is where the instructions begin.
 
     Arguments: None.
     Returns: None.
@@ -251,16 +256,7 @@ def main() -> None:
     LOG.info("03. PREPARE the modeling data.")
     LOG.info("-------------------------------")
 
-    # A regression model requires a value
-    # for both the selected feature and target.
-    # Keep the original DataFrame unchanged.
-    # Create a separate modeling DataFrame
-    # containing complete feature / target pairs.
-
-    required_columns: list[str] = [
-        FEATURE_COLUMN,
-        TARGET_COLUMN,
-    ]
+    required_columns: list[str] = [FEATURE_COLUMN, TARGET_COLUMN]
 
     df_model: pd.DataFrame = df.dropna(subset=required_columns).copy()
 
@@ -271,9 +267,6 @@ def main() -> None:
     LOG.info(f"Original rows: {count_original}")
     LOG.info(f"Modeling rows: {count_model}")
     LOG.info(f"Rows dropped: {count_dropped}")
-
-    # scikit-learn expects X to be a 2-dimensional
-    # feature matrix and y to be a 1-dimensional target.
 
     X: pd.DataFrame = df_model[[FEATURE_COLUMN]]
     y: pd.Series = df_model[TARGET_COLUMN]
@@ -308,30 +301,13 @@ def main() -> None:
 
     LOG.info(BASELINE_DECISION)
 
-    baseline_model = DummyRegressor(
-        strategy=BASELINE_STRATEGY,
-    )
-
-    baseline_model.fit(
-        X_train,
-        y_train,
-    )
+    baseline_model = DummyRegressor(strategy=BASELINE_STRATEGY)
+    baseline_model.fit(X_train, y_train)
 
     baseline_predictions: np.ndarray = baseline_model.predict(X_test)
 
-    baseline_rmse: float = float(
-        root_mean_squared_error(
-            y_test,
-            baseline_predictions,
-        )
-    )
-
-    baseline_r_squared: float = float(
-        r2_score(
-            y_test,
-            baseline_predictions,
-        )
-    )
+    baseline_rmse: float = float(root_mean_squared_error(y_test, baseline_predictions))
+    baseline_r_squared: float = float(r2_score(y_test, baseline_predictions))
 
     LOG.info(f"Baseline strategy: {BASELINE_STRATEGY}")
     LOG.info(f"Baseline RMSE: {baseline_rmse:.2f}")
@@ -344,11 +320,7 @@ def main() -> None:
     LOG.info(MODEL_DECISION)
 
     model = LinearRegression()
-
-    model.fit(
-        X_train,
-        y_train,
-    )
+    model.fit(X_train, y_train)
 
     slope: float = float(model.coef_[0])
     intercept: float = float(model.intercept_)
@@ -360,10 +332,6 @@ def main() -> None:
     LOG.info("07. PREDICT on X_test.")
     LOG.info("-------------------------------")
 
-    # The model has never trained on X_test.
-    # Use the trained model to predict target values
-    # for these held-back observations.
-
     model_predictions: np.ndarray = model.predict(X_test)
 
     LOG.info(f"Predictions created: {len(model_predictions)}")
@@ -372,27 +340,8 @@ def main() -> None:
     LOG.info("08. EVALUATE baseline vs model on y_test.")
     LOG.info("-------------------------------")
 
-    # RMSE measures prediction error
-    # in the same units as the target.
-    # Lower RMSE is better.
-
-    model_rmse: float = float(
-        root_mean_squared_error(
-            y_test,
-            model_predictions,
-        )
-    )
-
-    # R-squared describes how much of the variation
-    # in the test target is accounted for by the model.
-    # Larger values generally indicate a better fit.
-
-    model_r_squared: float = float(
-        r2_score(
-            y_test,
-            model_predictions,
-        )
-    )
+    model_rmse: float = float(root_mean_squared_error(y_test, model_predictions))
+    model_r_squared: float = float(r2_score(y_test, model_predictions))
 
     LOG.info("BASELINE RESULTS")
     LOG.info(f"RMSE:      {baseline_rmse:.2f}")
@@ -403,28 +352,41 @@ def main() -> None:
     LOG.info(f"R-squared: {model_r_squared:.3f}")
 
     LOG.info("-------------------------------")
-    LOG.info("09. VISUALIZE predictions and residuals.")
+    LOG.info("09. COMPARE candidate features (custom addition).")
+    LOG.info("-------------------------------")
+
+    LOG.info(f"Candidates: {CANDIDATE_FEATURES}")
+
+    comparison: pd.DataFrame = compare_features(
+        df,
+        TARGET_COLUMN,
+        CANDIDATE_FEATURES,
+    )
+
+    for _, row in comparison.iterrows():
+        LOG.info(
+            f"{row['feature']:<20} "
+            f"RMSE: {row['rmse']:.2f}  "
+            f"R-squared: {row['r_squared']:.3f}"
+        )
+
+    best_feature: str = str(comparison.iloc[0]["feature"])
+    LOG.info(f"Best single feature by R-squared: {best_feature}")
+
+    LOG.info("-------------------------------")
+    LOG.info("10. VISUALIZE predictions, residuals, and comparison.")
     LOG.info("-------------------------------")
 
     CHART_DIR.mkdir(parents=True, exist_ok=True)
 
     # === PREDICTIONS CHART ===
 
-    # Plot the actual test observations.
-
     _prediction_figure, prediction_ax = plt.subplots()
 
     x_test_values: np.ndarray = X_test[FEATURE_COLUMN].to_numpy()
     y_test_values: np.ndarray = y_test.to_numpy()
 
-    prediction_ax.scatter(
-        x_test_values,
-        y_test_values,
-        label="Actual",
-    )
-
-    # Sort x values so the regression line
-    # is drawn from left to right.
+    prediction_ax.scatter(x_test_values, y_test_values, label="Actual")
 
     prediction_order: np.ndarray = np.argsort(x_test_values)
 
@@ -434,73 +396,58 @@ def main() -> None:
         label="Predicted",
     )
 
-    # CUSTOM: The analyst can customize
-    # the returned Matplotlib Axes object.
-
-    prediction_ax.set_title("Bill Length vs. Body Mass")
-    prediction_ax.set_xlabel("Bill Length (mm)")
+    prediction_ax.set_title("Flipper Length vs. Body Mass")
+    prediction_ax.set_xlabel("Flipper Length (mm)")
     prediction_ax.set_ylabel("Body Mass (g)")
     prediction_ax.legend()
 
-    save_chart(
-        prediction_ax,
-        PREDICTION_CHART_PATH,
-    )
+    save_chart(prediction_ax, PREDICTION_CHART_PATH)
 
     LOG.info(f"Chart saved successfully at {PREDICTION_CHART_PATH}.")
 
     # === RESIDUAL CHART ===
 
-    # A residual is:
-    #
-    # actual value - predicted value
-    #
-    # Residuals near zero indicate predictions
-    # close to the observed target values.
-
     residuals: np.ndarray = y_test_values - model_predictions
 
     _residual_figure, residual_ax = plt.subplots()
 
-    residual_ax.scatter(
-        x_test_values,
-        residuals,
-    )
-
-    # Draw a horizontal reference line at zero.
-
+    residual_ax.scatter(x_test_values, residuals)
     residual_ax.axhline(0)
 
-    # CUSTOM: The analyst can customize
-    # the returned Matplotlib Axes object.
-
-    residual_ax.set_title("Residuals for Bill Length Model")
-    residual_ax.set_xlabel("Bill Length (mm)")
+    residual_ax.set_title("Residuals for Flipper Length Model")
+    residual_ax.set_xlabel("Flipper Length (mm)")
     residual_ax.set_ylabel("Residual (Actual - Predicted Body Mass)")
 
-    save_chart(
-        residual_ax,
-        RESIDUAL_CHART_PATH,
-    )
+    save_chart(residual_ax, RESIDUAL_CHART_PATH)
 
     LOG.info(f"Chart saved successfully at {RESIDUAL_CHART_PATH}.")
 
-    # ============================================================
-    # 10. ASSESS
-    # ============================================================
+    # === FEATURE COMPARISON CHART (CUSTOM) ===
+
+    _comparison_figure, comparison_ax = plt.subplots()
+
+    comparison_ax.bar(
+        comparison["feature"].tolist(),
+        comparison["r_squared"].tolist(),
+    )
+
+    comparison_ax.set_title("Which Single Feature Predicts Body Mass Best?")
+    comparison_ax.set_xlabel("Feature")
+    comparison_ax.set_ylabel("R-squared on Test Data")
+
+    save_chart(comparison_ax, COMPARISON_CHART_PATH)
+
+    LOG.info(f"Chart saved successfully at {COMPARISON_CHART_PATH}.")
 
     LOG.info("-------------------------------")
-    LOG.info("10. ASSESS the results.")
+    LOG.info("11. ASSESS the results.")
     LOG.info("-------------------------------")
 
-    # Run this app first.
-    # Review the baseline and model metrics.
-    # Review both visualizations.
-    # Then record your CUSTOM observations
-    # in a simple multi-line raw string.
+    # Run the app, then replace each ... with your real numbers
+    # and observations before submitting.
 
     LOG.info(r"""CUSTOM OBSERVATIONS:
-    I used bill length to predict body mass.
+    I used flipper length to predict body mass.
 
     The baseline RMSE was ...
     The LinearRegression RMSE was ...
@@ -510,17 +457,17 @@ def main() -> None:
 
     The model R-squared was ...
 
+    Comparing features, the best predictor was ...
+    and the weakest was ...
+
     In the residual plot, I observed ...
 
     Based on this evidence,
     I conclude ...
 
     Next, I would like to try ...
+    (for example: training a separate model per species)
     """)
-
-    # ============================================================
-    # DISPLAY
-    # ============================================================
 
     LOG.info("In a script, call plt.show() at the end to display all charts.")
     LOG.info("Close all chart windows (with the close button) to continue.")
